@@ -2,13 +2,14 @@ package bootstrap
 
 import (
 	"fmt"
+	"strings"
+	"time"
+
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	log "github.com/sirupsen/logrus"
 	"github.com/wechatgpt/wechatbot/config"
 	"github.com/wechatgpt/wechatbot/handler/telegram"
 	"github.com/wechatgpt/wechatbot/utils"
-	"strings"
-	"time"
 )
 
 func StartTelegramBot() {
@@ -62,6 +63,18 @@ func StartTelegramBot() {
 
 		tgKeyWord := config.GetTelegramKeyword()
 		var reply *string
+
+		msg := tgbotapi.NewMessage(chatID, "机器人正在思考...")
+		typingMsg, _ := bot.Send(msg)
+
+		chataction := tgbotapi.NewChatAction(chatID, tgbotapi.ChatTyping)
+		//bot.Debug = true
+		_, err := bot.Request(chataction)
+		if err != nil {
+			log.Errorf("发送消息出错:%s", err.Error())
+			continue
+		}
+
 		// 如果设置了关键字就以关键字为准，没设置就所有消息都监听
 		if tgKeyWord != nil {
 			content, key := utils.ContainsI(text, *tgKeyWord)
@@ -74,15 +87,26 @@ func StartTelegramBot() {
 			}
 			requestText := strings.TrimSpace(splitItems[1])
 			log.Println("问题：", requestText)
+
 			reply = telegram.Handle(requestText)
+
 		} else {
 			reply = telegram.Handle(text)
 		}
+
 		if reply == nil {
+			editMsg := tgbotapi.NewEditMessageText(chatID, typingMsg.MessageID, "OpenAI思考不过来了，你重新问一问.")
+			send, err := bot.Send(editMsg)
+			if err != nil {
+				log.Errorf("发送消息出错:%s", err.Error())
+				continue
+			}
+			fmt.Println(send.Text)
 			continue
 		}
-		msg := tgbotapi.NewMessage(chatID, *reply)
-		send, err := bot.Send(msg)
+
+		editMsg := tgbotapi.NewEditMessageText(chatID, typingMsg.MessageID, *reply)
+		send, err := bot.Send(editMsg)
 		if err != nil {
 			log.Errorf("发送消息出错:%s", err.Error())
 			continue
